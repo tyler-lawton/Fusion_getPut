@@ -41,6 +41,7 @@ try:
     import json, sys, argparse, os, subprocess, sys, requests, datetime, re, shutil, types, base64
     from io import BytesIO, StringIO
     from requests import Response
+
     # StringIO moved into io package for Python 3
     # from StringIO import StringIO
     from zipfile import ZipFile
@@ -50,23 +51,24 @@ try:
     cwd = os.path.dirname(os.path.realpath(sys.argv[0]))
 
     OBJ_TYPES = {
-        "fusionApps":       {"ext": "APP"}
-        , "zones":          {"ext": "ZN"}
-        , "templates":      {"ext": "TPL"}
-        , "dataModels":     {"ext": "DM"}
-        , "indexPipelines": {"ext": "IPL"}
-        , "queryPipelines": {"ext": "QPL"}
-        , "indexProfiles":  {"ext": "IPF"}
-        , "queryProfiles":  {"ext": "QPF"}
-        , "parsers":        {"ext": "PS"}
-        , "dataSources":    {"ext": "DS"}
-        , "collections":    {"ext": "COL", "urlType": "collection"}
-        , "jobs":           {"ext": "JOB"}
-        , "tasks":          {"ext": 'TSK'}
-        , "sparkJobs":      {"ext": 'SPRK', "filelist": []}
-        , "blobs":          {"ext": "BLOB", "urlType": "blob"}
+        "fusionApps": {"ext": "APP"},
+        "zones": {"ext": "ZN"},
+        "templates": {"ext": "TPL"},
+        "dataModels": {"ext": "DM"},
+        "indexPipelines": {"ext": "IPL"},
+        "queryPipelines": {"ext": "QPL"},
+        "indexProfiles": {"ext": "IPF"},
+        "queryProfiles": {"ext": "QPF"},
+        "parsers": {"ext": "PS"},
+        "dataSources": {"ext": "DS"},
+        "collections": {"ext": "COL", "urlType": "collection"},
+        "jobs": {"ext": "JOB"},
+        "tasks": {"ext": "TSK"},
+        "sparkJobs": {"ext": "SPRK", "filelist": []},
+        "blobs": {"ext": "BLOB", "urlType": "blob"}
         # features can't be fetched by id in the export API but come along with the collections.
-        , "features":       {"ext": "CF"}
+        ,
+        "features": {"ext": "CF"},
     }
 
     search_clusters = {}
@@ -74,10 +76,8 @@ try:
     PARAM_SIZE_LIMIT = 6400
     TAG_SUFFIX: str = "_mergeForm"
 
-
     def eprint(*args, **kwargs) -> None:
         print(*args, file=sys.stderr, **kwargs)
-
 
     def sprint(msg) -> None:
         # change inputs to *args, **kwargs in python 3
@@ -85,20 +85,16 @@ try:
         print(msg)
         sys.stdout.flush()
 
-
     def debug(msg) -> None:
         if args.debug:
             sprint(msg)
-
 
     def verbose(msg) -> None:
         if args.verbose:
             sprint(msg)
 
-
     def get_suffix(obj_type) -> str:
         return f"_{OBJ_TYPES[obj_type]['ext']}.json"
-
 
     def apply_suffix(f, suffix_type) -> str:
         suf = OBJ_TYPES[suffix_type]["ext"]
@@ -106,10 +102,9 @@ try:
             return f"{f}{get_suffix(suffix_type)}"
         return f"{f}.json"
 
-
     def init_args() -> None:
         env = {}  # some day we may get better environment passing
-        debug('initArgs start')
+        debug("initArgs start")
 
         # setting come from command line but if not set then pull from environment
         if args.server is None:
@@ -135,7 +130,6 @@ try:
             def_dir = f"{str(args.zip)}_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}"
             args.dir = def_dir
 
-
     def init_args_from_maps(key: str, default: str, penv: dict, env: dict) -> str:
         if key in penv:
             debug(f"penv has_key {key}:{penv[key]}")
@@ -148,13 +142,17 @@ try:
                 debug(f"default setting for {key}:{default}")
                 return default
 
-
     def make_base_uri() -> str:
         uri = args.server + "/api"
         return uri
 
-
-    def do_http(url: str, usr: str = None, pswd: str = None, headers: dict = {}, params: dict = {}) -> Response:
+    def do_http(
+        url: str,
+        usr: str = None,
+        pswd: str = None,
+        headers: dict = {},
+        params: dict = {},
+    ) -> Response:
         response = None
         auth = None
         if usr is None:
@@ -163,7 +161,7 @@ try:
             pswd = args.password
 
         if args.jwt is not None:
-            headers["Authorization"] = f'Bearer {args.jwt}'
+            headers["Authorization"] = f"Bearer {args.jwt}"
         else:
             auth = requests.auth.HTTPBasicAuth(usr, pswd)
 
@@ -174,7 +172,6 @@ try:
             return response
         except requests.ConnectionError as err:
             eprint(err)
-
 
     def make_export_params_from_json(j: dict) -> Sequence[dict]:
         """
@@ -203,9 +200,11 @@ try:
 
                 itms = []
                 for item in items:
-                    if isinstance(item, dict) \
-                            and "id" in item \
-                            and not (key == "blobs" and item["id"].startswith("prefs-")):
+                    if (
+                        isinstance(item, dict)
+                        and "id" in item
+                        and not (key == "blobs" and item["id"].startswith("prefs-"))
+                    ):
                         itms.append(item["id"])
 
                 if isinstance(itms, list) and "urlType" in OBJ_TYPES[key]:
@@ -227,33 +226,32 @@ try:
             all_params.insert(0, params)
         return all_params
 
-
     def do_get_json_app() -> None:
         """
         fetch a json export of the app.  The purpose is to get a list of everything that belongs to the App.
         Then, after extracting all but the blobs and collections fetch those into Zip(s) and extract including files.
         All this to work around the fact that we can't export an app to a zip without query_rewrite
         """
-        url = make_base_uri() + "/objects/export?filterPolicy=system&app.ids=" + args.app
-        headers = {'accept': 'application/json'}
+        url = f"{make_base_uri()}/objects/export?filterPolicy=system&app.ids={args.app}"
+        headers = {"accept": "application/json"}
         try:
             debug(f"calling requests.get url:{url}  headers:{str(headers)}")
             verbose(f"Getting JSON elements of APP {args.app} from {args.server}")
             response: Response = do_http(url=url, headers=headers)
             if response is not None and response.status_code == 200:
-                content_type = response.headers['Content-Type']
+                content_type = response.headers["Content-Type"]
                 if "application/json" in content_type:
                     j = json.loads(response.content)
                     export_params = make_export_params_from_json(j)
                     # In addition to processing all the zip files from exportParam sets, we need to output
                     # APP and possibly features but don't grab blobs and collections.  Those need to come from full zips
                     # Might depend on 5.x release whether the object exists - remove them if present
-                    if 'blobs' in j['objects']:
-                        j['objects'].pop('blobs')
+                    if "blobs" in j["objects"]:
+                        j["objects"].pop("blobs")
                     else:
                         debug("blobs key does not exist")
-                    if 'collections' in j['objects']:
-                        j['objects'].pop('collections')
+                    if "collections" in j["objects"]:
+                        j["objects"].pop("collections")
                     else:
                         debug("collections key does not exist")
 
@@ -268,19 +266,18 @@ try:
                         zipfile = do_http_zip_get(url, params=params)
                         extract_app_from_zip(zipfile, validate_app_name=False)
             else:
-                if response is not None and response.status_code == 401 and 'unauthorized' in response.text:
+                if response is not None and response.status_code == 401 and "unauthorized" in response.text:
                     eprint(f"Non OK response of {str(response.status_code)} for URL: {url} \nCheck your password\n")
                 elif response is not None and response.status_code:
                     eprint(f"Non OK response of {str(response.status_code)} for URL: {url}")
         except Exception as err:
             eprint(f"Exception when fetching App: {str(err)}")
 
-
     def do_http_zip_get(url: str, usr: str = None, pswd: str = None, params: dict = {}) -> ZipFile:
         response = None
         response = do_http(url, usr, pswd, params=params)
         if response is not None and response.status_code == 200:
-            content_type = response.headers['Content-Type']
+            content_type = response.headers["Content-Type"]
             debug("content_type of response is " + content_type)
             # use a contains check since the content_type may be 'application/json; utf-8' or multi-valued
             if "application/zip" in content_type:
@@ -295,8 +292,7 @@ try:
                 eprint(f"\tReported Reason: '{response.reason}'")
         else:
             # Bad url?? bad protocol?
-            eprint(f"Problem requesting URL: '{url}'.  Check server, protocol, port, etc.")
-
+            eprint(f"Problem requesting URL: '{url}'. Check server, protocol, port, etc.")
 
     def extract_app_from_zip(zipfile: ZipFile = None, objects: dict = None, validate_app_name: bool = True) -> None:
         """
@@ -309,7 +305,7 @@ try:
         """
 
         if (zipfile and objects) or not (zipfile or objects):
-            raise ValueError('Either zipfile or objects parameter is required.')
+            raise ValueError("Either zipfile or objects parameter is required.")
 
         filelist = []
         if zipfile:
@@ -320,18 +316,24 @@ try:
             objects = json.loads(jstr)
 
         # check to be sure that the requested application exists and give error if not
-        if validate_app_name and args.app is not None and not (objects and
-                                                               (len(objects['objects']) > 0) and
-                                                               (objects['objects']['fusionApps']) and
-                                                               (objects['objects']['fusionApps'][0]['id']) and
-                                                               (objects['objects']['fusionApps'][0]['id'] == args.app)):
-            sys.exit("No Fusion App called '" + args.app + "' found on server '" + args.server + "'.  Can not proceed.")
+        if (
+            validate_app_name
+            and args.app is not None
+            and not (
+                objects
+                and (len(objects["objects"]) > 0)
+                and (objects["objects"]["fusionApps"])
+                and (objects["objects"]["fusionApps"][0]["id"])
+                and (objects["objects"]["fusionApps"][0]["id"] == args.app)
+            )
+        ):
+            sys.exit(f"No Fusion App called '{args.app}' found on server '{args.server}'. Can not proceed.")
 
         # sorting ensures that collections are known when other elements are extracted
-        # python 3 iterkeys() -> keys()
-        for type in sorted(objects['objects'].keys()):
-            # obj will be the name of the object type just under objects i.e. objects.collections, indexPipelines etc.
-            do_object_type_switch(objects['objects'][type], type)
+        for obj_type in sorted(objects["objects"].keys()):
+            # obj will be the name of the object type just under objects
+            # i.e. objects.collections, indexPipelines etc.
+            do_object_type_switch(objects["objects"][obj_type], obj_type)
 
         # global collections[] will hold exported collection names.
         # Get the configsets for those and write them out as well
@@ -344,32 +346,30 @@ try:
         if zipfile:
             zipfile.close()
 
-
     def should_extract_file(filename: str) -> bool:
-        """ Check for blob zips which should be extracted intact or non-zipped configsets. """
-        path = filename.split('/')
+        """Check for blob zips which should be extracted intact or non-zipped configsets."""
+        path = filename.split("/")
         extension = os.path.splitext(path[-1])
         file = extension[0]
         ext = extension[-1]
-        if path[0] == 'blobs':
+        if path[0] == "blobs":
             return not file.startswith("prefs-")
-        # in 4.0.2 configsets are already unzip so each file can be extracted.  this block should catch 4.0.2 case
+        # in 4.0.2 configsets are already unzip so each file can be extracted.
+        # this block should catch 4.0.2 case
         # and shouldExtractConfig will catch the 4.0.1 case
-        elif len(path) > 2 and path[0] == 'configsets' and ext != '.zip' and path[1] in collections:
+        elif len(path) > 2 and path[0] == "configsets" and ext != ".zip" and path[1] in collections:
             return True
         return False
-
 
     def should_extract_embedded_zipfile(filename: str) -> bool:
-        """ Check for embedded and zipped configsets in need of extraction. """
-        path = filename.split('/')
+        """Check for embedded and zipped configsets in need of extraction."""
+        path = filename.split("/")
         extension = os.path.splitext(path[-1])
         file = extension[0]
         ext = extension[-1]
-        if path[0] == 'configsets' and ext == '.zip' and file in collections:
+        if path[0] == "configsets" and ext == ".zip" and file in collections:
             return True
         return False
-
 
     def extract_from_zipfile(filename: str, zipfile: ZipFile) -> None:
         """
@@ -381,45 +381,41 @@ try:
         else:
             eprint(f"File '{filename}' in archive is zero length. Extraction skipped.")
 
-
     def extract_zipfile(filename: str, zipfile: ZipFile):
-        path = filename.split('/')
+        path = filename.split("/")
         path[-1] = os.path.splitext(path[-1])[0]
         output_dir = os.path.join(args.dir, *path)
         zipfile_data = BytesIO(zipfile.read(filename))
         with ZipFile(zipfile_data) as zf:
             zf.extractall(output_dir)
 
-
     def do_object_type_switch(elements, obj_type):
-        """ Do something with some json based on the type of the json array. """
+        """Do something with some json based on the type of the json array."""
         switcher = {
-            "fusionApps":       collect_by_id
-            , "collections":    lambda l_elements, l_type: collect_collections(l_elements, l_type)
-            , "features":       lambda l_elements, l_type: collect_features(l_elements, l_type)
-            , "indexPipelines": collect_by_id
-            , "queryPipelines": collect_by_id
-            , "indexProfiles":  collect_profile_by_id
-            , "queryProfiles":  collect_profile_by_id
-            , "parsers":        collect_by_id
-            , "dataSources":    collect_by_id
-            , "tasks":          collect_by_id
-            , "jobs":           collect_by_id
-            , "sparkJobs":      collect_by_id
-            , "templates":      lambda l_elements, l_type: collect_by_id(l_elements, l_type, "id", "name")
-            , "zones":          lambda l_elements, l_type: collect_by_id(l_elements, l_type, "id", "name")
-            , "dataModels":     collect_by_id
-            , "blobs":          lambda l_elements, l_type: collect_by_id(l_elements, l_type, "filename", "dir")
-
+            "fusionApps": collect_by_id,
+            "collections": lambda l_elements, l_type: collect_collections(l_elements, l_type),
+            "features": lambda l_elements, l_type: collect_features(l_elements, l_type),
+            "indexPipelines": collect_by_id,
+            "queryPipelines": collect_by_id,
+            "indexProfiles": collect_profile_by_id,
+            "queryProfiles": collect_profile_by_id,
+            "parsers": collect_by_id,
+            "dataSources": collect_by_id,
+            "tasks": collect_by_id,
+            "jobs": collect_by_id,
+            "sparkJobs": collect_by_id,
+            "templates": lambda l_elements, l_type: collect_by_id(l_elements, l_type, "id", "name"),
+            "zones": lambda l_elements, l_type: collect_by_id(l_elements, l_type, "id", "name"),
+            "dataModels": collect_by_id,
+            "blobs": lambda l_elements, l_type: collect_by_id(l_elements, l_type, "filename", "dir"),
         }
         # get the function matchng the type or a noop
         process_typed_element_func = switcher.get(obj_type, lambda *args: None)
         # call the function passing elements and type
         process_typed_element_func(elements, obj_type)
 
-
     def sorted_deep(d):
-        """ Recurse through the entire JSON tree and sort all key/values. """
+        """Recurse through the entire JSON tree and sort all key/values."""
 
         def make_tuple(v):
             return (*v,) if isinstance(v, (list, dict)) else (v,)
@@ -430,11 +426,10 @@ try:
             return {k: sorted_deep(d[k]) for k in sorted(d)}
         return d
 
-
     def json_to_file(j_data, obj_type, filename, alt_sub_dir=None) -> None:
         j_data = sorted_deep(j_data)
         # replace spaces in filename to make the files sed friendly
-        filename2 = filename.replace(' ', '_')
+        filename2 = filename.replace(" ", "_")
         if alt_sub_dir is None:
             sub_dir = obj_type
         else:
@@ -443,14 +438,14 @@ try:
         if obj_type and not os.path.isdir(os.path.join(args.dir, sub_dir)):
             os.makedirs(os.path.join(args.dir, sub_dir))
 
-        with open(os.path.join(args.dir, sub_dir, filename2), 'w') as outfile:
+        with open(os.path.join(args.dir, sub_dir, filename2), "w") as outfile:
             # sorting keys makes the output source-control friendly.  Do we also want to strip out
             if "updates" in j_data:
-                j_data.pop('updates', None)
+                j_data.pop("updates", None)
             if "modifiedTime" in j_data:
-                j_data.pop('modifiedTime', None)
+                j_data.pop("modifiedTime", None)
             if "version" in j_data:
-                j_data.pop('version', None)
+                j_data.pop("version", None)
 
             if not args.noStageIdMunge and "stages" in j_data:
                 stages = j_data["stages"]
@@ -459,15 +454,13 @@ try:
                         stage.pop("secretSourceStageId", None)
                     stage["id"] = munge_stage_id(stage, str(i))
 
-            outfile.write(json.dumps(j_data, indent=4, sort_keys=True, separators=(', ', ': ')))
+            outfile.write(json.dumps(j_data, indent=4, sort_keys=True, separators=(", ", ": ")))
             outfile.close()
-
 
     def munge_stage_id(stage, idx_str) -> str:
         stage_type = stage.get("type", "")
         label = stage.get("label", "")
         return re.sub("[ -]", "_", f"{stage_type}:{label}:{idx_str}")
-
 
     def make_script_readable(element: object, tag: str) -> None:
         if tag in element:
@@ -475,36 +468,34 @@ try:
             # update element with split script
             element[tag + TAG_SUFFIX] = script.splitlines()
 
-
     def make_diff_friendly(e, obj_type) -> None:
         xform_tags = [
-            "script"  # scala script, python
-            , "transformScala"  # PBL
-            , "transformSQL"  # PBL
-            , "sql"  # sqlTemplate
-            , "sparkSQL"  # sqlTemplate, headTail, tokenPhraseSpellCorrection
-            , "misspellingSQL"  # synonym detection
-            , "phraseSQL"  # synonym detection
-            , "rollupSql"  # sql_template
+            "script",  # scala script, python
+            "transformScala",  # PBL
+            "transformSQL",  # PBL
+            "sql",  # sqlTemplate
+            "sparkSQL",  # sqlTemplate, headTail, tokenPhraseSpellCorrection
+            "misspellingSQL",  # synonym detection
+            "phraseSQL",  # synonym detection
+            "rollupSql"  # sql_template
             # ,"analyzerConfigQuery" # candidate json from some 4 sisters
             # ,"notes" # candidate for multi-line descript/notes field
         ]
 
-        if isinstance(e, dict) and obj_type.endswith("Pipelines") and ('stages' in e.keys()):
-            for stage in e['stages']:
-                if isinstance(stage, dict) and ('script' in stage.keys()):
+        if isinstance(e, dict) and obj_type.endswith("Pipelines") and ("stages" in e.keys()):
+            for stage in e["stages"]:
+                if isinstance(stage, dict) and ("script" in stage.keys()):
                     stg_keys = stage.keys()
-                    if 'script' in stg_keys:
+                    if "script" in stg_keys:
                         make_script_readable(stage, "script")
-                    if 'condition' in stg_keys and '\n' in stage['condition']:
+                    if "condition" in stg_keys and "\n" in stage["condition"]:
                         make_script_readable(stage, "condition")
         elif isinstance(e, dict) and obj_type == "sparkJobs":
             for tag in xform_tags:
                 if tag in e:
                     make_script_readable(e, tag)
 
-
-    def collect_by_id(elements, obj_type, key_field='id', name_space_field=None):
+    def collect_by_id(elements, obj_type, key_field="id", name_space_field=None):
         for ele in elements:
             if key_field not in ele and "resource" in ele:
                 key_field = "resource"
@@ -519,14 +510,14 @@ try:
             if name_space_field is not None and name_space_field in ele:
                 ns = ele[name_space_field]
                 if ns is not None:
-                    ns = re.sub(r"^[/\\:\s]", '', ns)
+                    ns = re.sub(r"^[/\\:\s]", "", ns)
                     filename = apply_suffix(
-                        re.sub(r"[/\\:.\s]", '_', ns) + '_' + ele_id.replace(':', '_').replace('/', '_'),
-                        obj_type)
+                        re.sub(r"[/\\:.\s]", "_", ns) + "_" + ele_id.replace(":", "_").replace("/", "_"),
+                        obj_type,
+                    )
             else:
-                filename = apply_suffix(ele_id.replace(':', '_').replace('/', '_'), obj_type)
+                filename = apply_suffix(ele_id.replace(":", "_").replace("/", "_"), obj_type)
             json_to_file(j_data=ele, obj_type=obj_type, filename=filename)
-
 
     def collect_profile_by_id(elements, obj_type) -> None:
         """
@@ -535,8 +526,8 @@ try:
         Update: looks like 4.1 gets rid of the ALL
         """
         mylist = []
-        if isinstance(elements, dict) and ('ALL' in elements.keys()):
-            mylist = elements['ALL']
+        if isinstance(elements, dict) and ("ALL" in elements.keys()):
+            mylist = elements["ALL"]
         # 4.0.0 seems to give a dict of items id:[{id:val...}]
         elif isinstance(elements, dict):
             mylist = []
@@ -552,33 +543,35 @@ try:
             collect_by_id(mylist, obj_type)
         elif len(elements) > 1:
             eprint(
-                "Unknown JSON structure encountered.  Profiles subtree should be 'ALL' element or array of Profiles.")
-
+                "Unknown JSON structure encountered.  Profiles subtree should be 'ALL' element or array of Profiles."
+            )
 
     def collect_features(elements, obj_type="features") -> None:
         for col in elements:
             features = elements[col]
-            filename = apply_suffix(col.replace(':', '_').replace('/', '_'), obj_type)
-            json_to_file(j_data=features, obj_type=obj_type, filename=filename, alt_sub_dir="collectionFeatures")
-
+            filename = apply_suffix(col.replace(":", "_").replace("/", "_"), obj_type)
+            json_to_file(
+                j_data=features,
+                obj_type=obj_type,
+                filename=filename,
+                alt_sub_dir="collectionFeatures",
+            )
 
     def collect_collections(elements, obj_type="collections") -> None:
         keep = []
         for ele in elements:
-            ele_id = ele['id']
+            ele_id = ele["id"]
             keep.append(ele)
             # make sure associated clusters are exported
             # keep track of the default collections (global) we are exporting so that schema can be exported as well
             # do not export schema for collections on non-default clusters.  Best to not mess with remote config
-            if ele['searchClusterId'] == 'default':
+            if ele["searchClusterId"] == "default":
                 collections.append(ele_id)
 
         collect_by_id(keep, obj_type)
 
-
     def collect_index_pipelines(elements) -> None:
         collect_by_id(elements, "indexPipelines")
-
 
     def main() -> None:
         init_args()
@@ -590,47 +583,50 @@ try:
         zipfile = None
         if args.zip is not None:
             sprint(f"Getting export zip from file '{args.zip}'")
-            zipfile = ZipFile(args.zip, 'r')
+            zipfile = ZipFile(args.zip, "r")
             extract_app_from_zip(zipfile)
         else:
             do_get_json_app()
-
 
     if __name__ == "__main__":
         scriptName = os.path.basename(__file__)
         # sample line: 'usage: getProject.py [-h] [-l] [--protocol PROTOCOL] [-s SERVER] [--port PORT]'
         description = (
-            '______________________________________________________________________________\n'
-            'Get artifacts associated with a Fusion app and store them together in a folder \n'
-            'as subfolders, and flat files. These files can be stored, manipulate and uploaded, \n'
-            'to a Fusion instance as needed. NOTE: if launching from getApp.sh, \n'
-            'defaults will be pulled from the bash environment plus values from bin/lw.env.sh\n'
-            '______________________________________________________________________________'
+            "______________________________________________________________________________\n"
+            "Get artifacts associated with a Fusion app and store them together in a folder \n"
+            "as subfolders, and flat files. These files can be stored, manipulate and uploaded, \n"
+            "to a Fusion instance as needed. NOTE: if launching from getApp.sh, \n"
+            "defaults will be pulled from the bash environment plus values from bin/lw.env.sh\n"
+            "______________________________________________________________________________"
         )
         parser = argparse.ArgumentParser(description=description, formatter_class=RawTextHelpFormatter)
 
         # parser.add_argument_group('bla bla bla instruction go here and they are really long \t and \n have tabs and\n newlines')
         parser.add_argument(
-            "-a", "--app",
+            "-a",
+            "--app",
             type=str,
             help="App to export"
             # ,default="lwes_"
         )
         parser.add_argument(
-            "-d", "--dir",
+            "-d",
+            "--dir",
             type=str,
             help="Output directory, default: '${app}_ccyymmddhhmm'."
             # ,default="default"
         )
         parser.add_argument(
-            "-s", "--server",
+            "-s",
+            "--server",
             metavar="SVR",
             type=str,
             help="Server url e.g. http://localhost:80, \ndefault: ${lw_IN_SERVER} or 'localhost'."
             # default="localhost"
         )
         parser.add_argument(
-            "-u", "--user",
+            "-u",
+            "--user",
             type=str,
             help="Fusion user name, default: ${lw_USER} or 'admin'."
             # ,default="admin"
@@ -645,56 +641,61 @@ try:
             "--jwt",
             help="JWT token for access to Fusion.  If set, --user and --password will be ignored",
             type=str,
-            default=None
+            default=None,
         )
         parser.add_argument(
-            "-v", "--verbose",
+            "-v",
+            "--verbose",
             help="Print details, default: False.",
             type=bool,
             default=False,
-            action="store_true"
+            action="store_true",
         )
         parser.add_argument(
             "--debug",
             help="Print debug messages while running, default: False.",
             type=bool,
             default=False,
-            action="store_true"
+            action="store_true",
         )
         parser.add_argument(
             "--noVerify",
             help="Do not verify SSL certificates if using https, default: False.",
             type=bool,
             default=False,
-            action="store_true"
+            action="store_true",
         )
         parser.add_argument(
-            "-z", "--zip",
+            "-z",
+            "--zip",
             help="Path and name of the Zip file to read from rather than using an export from --server, \ndefault: None.",
             type=str,
-            default=None
+            default=None,
         )
         parser.add_argument(
             "--noStageIdMunge",
             help="Experimental: may become default.  If True, do not munge pipeline stage ids. default: False.",
             type=bool,
             default=False,
-            action="store_true"
+            action="store_true",
         )
 
         # print("args: " + str(sys.argv))
         args = parser.parse_args()
         main()
 except ImportError as ie:
-    print("Failed to Import from module: ",
-          ie.name,
-          "\ninstall the module via the pip installer\n\nExample:\npip3 install ",
-          ie.name, file=sys.stderr)
+    print(
+        "Failed to Import from module: ",
+        ie.name,
+        "\ninstall the module via the pip installer\n\nExample:\npip3 install ",
+        ie.name,
+        file=sys.stderr,
+    )
 except Exception as e:
     msg = None
     if hasattr(e, "msg"):
         msg = e.msg
-    elif hasattr(e, 'text'):
+    elif hasattr(e, "text"):
         msg = e["text"]
     else:
         msg = str(e)
