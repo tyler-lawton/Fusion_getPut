@@ -35,7 +35,7 @@ Update or modify as needed
 # which start with the $PREFIX so that they can all be exported.
 
 #  Requires a python 3.x+ interpreter (tested on 3.8.9)
-from typing import Sequence
+from typing import Dict, Literal, Sequence, TypedDict
 
 try:
     import json, sys, argparse, os, subprocess, sys, requests, datetime, re, shutil, types, base64
@@ -97,14 +97,14 @@ try:
 
 
     def get_suffix(obj_type) -> str:
-        return '_' + OBJ_TYPES[obj_type]['ext'] + '.json'
+        return f"_{OBJ_TYPES[obj_type]['ext']}.json"
 
 
     def apply_suffix(f, suffix_type) -> str:
         suf = OBJ_TYPES[suffix_type]["ext"]
         if not f.endswith(suf):
-            return f + get_suffix(suffix_type);
-        return f + ".json"
+            return f"{f}{get_suffix(suffix_type)}"
+        return f"{f}.json"
 
 
     def init_args() -> None:
@@ -124,31 +124,28 @@ try:
         if args.password is None:
             args.password = init_args_from_maps("lw_PASSWORD", "password123", os.environ, env)
 
-        if args.app is None:
-            if args.zip is None:
-                sys.exit("either the --app or the --zip argument is required.  Can not proceed.")
+        if args.app is None and args.zip is None:
+            sys.exit("either the --app or the --zip argument is required.  Can not proceed.")
 
         if args.dir is None and args.zip is None:
             # make default dir name
-            def_dir = str(args.app) + "_" + datetime.datetime.now().strftime('%Y%m%d_%H%M')
+            def_dir = f"{str(args.app)}_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}"
             args.dir = def_dir
         elif args.dir is None and args.zip is not None:
-            def_dir = str(args.zip) + "_" + datetime.datetime.now().strftime('%Y%m%d_%H%M')
+            def_dir = f"{str(args.zip)}_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}"
             args.dir = def_dir
 
 
-    def init_args_from_maps(key, default, penv, env) -> str:
-        # Python3: dict.has_key -> key in dict
+    def init_args_from_maps(key: str, default: str, penv: dict, env: dict) -> str:
         if key in penv:
-            debug("penv has_key" + key + " : " + penv[key])
+            debug(f"penv has_key {key}:{penv[key]}")
             return penv[key]
         else:
-            # Python3: dict.has_key -> key in dict
             if key in env:
-                debug("env has_key" + key + " : " + env[key])
+                debug(f"env has_key {key}:{env[key]}")
                 return env[key]
             else:
-                debug("default setting for " + key + " : " + default)
+                debug(f"default setting for {key}:{default}")
                 return default
 
 
@@ -157,7 +154,7 @@ try:
         return uri
 
 
-    def do_http(url, usr=None, pswd=None, headers={}, params={}) -> Response:
+    def do_http(url: str, usr: str = None, pswd: str = None, headers: dict = {}, params: dict = {}) -> Response:
         response = None
         auth = None
         if usr is None:
@@ -172,14 +169,14 @@ try:
 
         verify = not args.noVerify
         try:
-            debug("calling requests.get url:" + url + " usr:" + usr + " pswd:" + pswd + " headers:" + str(headers))
+            debug(f"calling requests.get url:{url} usr:{usr} pswd:{pswd} headers:{str(headers)}")
             response = requests.get(url, auth=auth, headers=headers, verify=verify, params=params)
             return response
         except requests.ConnectionError as err:
             eprint(err)
 
 
-    def make_export_params_from_json(j) -> Sequence[dict]:
+    def make_export_params_from_json(j: dict) -> Sequence[dict]:
         """
         Make n export URL containing all the needed id えぇめんts existing in the objects.json file
         :param j:
@@ -216,8 +213,11 @@ try:
                     # If so, store off the smaller params set in allParams and start a new one
                     if len(str(params)) + len(str(itms)) > PARAM_SIZE_LIMIT:
                         all_params.insert(0, params)
-                        params = {"filterPolicy": "system", "deep": "false"}
-                        params[OBJ_TYPES[key]["urlType"] + ".ids"] = itms
+                        params = {
+                            "filterPolicy": "system",
+                            "deep": "false",
+                            OBJ_TYPES[key]["urlType"] + ".ids": itms,
+                        }
                     # otherwise add to the current params list since we are under the size limit
                     else:
                         params[OBJ_TYPES[key]["urlType"] + ".ids"] = itms
@@ -237,15 +237,15 @@ try:
         url = make_base_uri() + "/objects/export?filterPolicy=system&app.ids=" + args.app
         headers = {'accept': 'application/json'}
         try:
-            debug("calling requests.get url:" + url + " headers:" + str(headers))
+            debug(f"calling requests.get url:{url}  headers:{str(headers)}")
             verbose(f"Getting JSON elements of APP {args.app} from {args.server}")
-            response: Response = do_http(url, headers=headers)
+            response: Response = do_http(url=url, headers=headers)
             if response is not None and response.status_code == 200:
-                contentType = response.headers['Content-Type']
-                if "application/json" in contentType:
+                content_type = response.headers['Content-Type']
+                if "application/json" in content_type:
                     j = json.loads(response.content)
-                    exportParams = make_export_params_from_json(j)
-                    ## in addition to processing all of the zip files from exportParam sets, we need to output
+                    export_params = make_export_params_from_json(j)
+                    # In addition to processing all the zip files from exportParam sets, we need to output
                     # APP and possibly features but don't grab blobs and collections.  Those need to come from full zips
                     # Might depend on 5.x release whether the object exists - remove them if present
                     if 'blobs' in j['objects']:
@@ -261,7 +261,7 @@ try:
                     extract_app_from_zip(objects=j, validate_app_name=True)
                     url = make_base_uri() + "/objects/export"
                     index = 0
-                    for params in exportParams:
+                    for params in export_params:
                         if args.verbose:
                             index += 1
                             sprint(f"\nFetching Zip export from {url} params set {index}")
@@ -276,7 +276,7 @@ try:
             eprint(f"Exception when fetching App: {str(err)}")
 
 
-    def do_http_zip_get(url, usr=None, pswd=None, params={}) -> ZipFile:
+    def do_http_zip_get(url: str, usr: str = None, pswd: str = None, params: dict = {}) -> ZipFile:
         response = None
         response = do_http(url, usr, pswd, params=params)
         if response is not None and response.status_code == 200:
@@ -288,17 +288,17 @@ try:
                 zipfile = ZipFile(BytesIO(content))
                 return zipfile
             else:
-                eprint("Non Zip content type of '" + content_type + "' for url:'" + url + "'")
+                eprint(f"Non Zip content type of '{content_type}' for url:'{url}'")
         elif response is not None and response.status_code != 200:
-            eprint("Non OK response of " + str(response.status_code) + " for URL: " + url)
+            eprint(f"Non OK response of {str(response.status_code)} for URL: {url}")
             if response.reason is not None:
-                eprint("\tReported Reason: '" + response.reason + "'")
+                eprint(f"\tReported Reason: '{response.reason}'")
         else:
             # Bad url?? bad protocol?
-            eprint("Problem requesting URL: '" + url + "'.  Check server, protocol, port, etc.")
+            eprint(f"Problem requesting URL: '{url}'.  Check server, protocol, port, etc.")
 
 
-    def extract_app_from_zip(zipfile=None, objects=None, validate_app_name=True) -> None:
+    def extract_app_from_zip(zipfile: ZipFile = None, objects: dict = None, validate_app_name: bool = True) -> None:
         """
         Either zipfile or objects must be valued but not both
 
@@ -345,7 +345,7 @@ try:
             zipfile.close()
 
 
-    def should_extract_file(filename) -> bool:
+    def should_extract_file(filename: str) -> bool:
         """ Check for blob zips which should be extracted intact or non-zipped configsets. """
         path = filename.split('/')
         extension = os.path.splitext(path[-1])
@@ -379,7 +379,7 @@ try:
         if zipfile.getinfo(filename).file_size > 0:
             zipfile.extract(filename, args.dir)
         else:
-            eprint("File " + filename + " in archive is zero length. Extraction skipped.")
+            eprint(f"File '{filename}' in archive is zero length. Extraction skipped.")
 
 
     def extract_zipfile(filename: str, zipfile: ZipFile):
@@ -466,7 +466,7 @@ try:
     def munge_stage_id(stage, idx_str) -> str:
         stage_type = stage.get("type", "")
         label = stage.get("label", "")
-        return re.sub("[ -]", "_", stage_type + ":" + label + ":" + idx_str)
+        return re.sub("[ -]", "_", f"{stage_type}:{label}:{idx_str}")
 
 
     def make_script_readable(element: object, tag: str) -> None:
@@ -525,7 +525,7 @@ try:
                         obj_type)
             else:
                 filename = apply_suffix(ele_id.replace(':', '_').replace('/', '_'), obj_type)
-            json_to_file(ele, obj_type, filename)
+            json_to_file(j_data=ele, obj_type=obj_type, filename=filename)
 
 
     def collect_profile_by_id(elements, obj_type) -> None:
@@ -559,19 +559,19 @@ try:
         for col in elements:
             features = elements[col]
             filename = apply_suffix(col.replace(':', '_').replace('/', '_'), obj_type)
-            json_to_file(features, obj_type, filename, alt_sub_dir="collectionFeatures")
+            json_to_file(j_data=features, obj_type=obj_type, filename=filename, alt_sub_dir="collectionFeatures")
 
 
     def collect_collections(elements, obj_type="collections") -> None:
         keep = []
-        for e in elements:
-            id = e['id']
-            keep.append(e)
+        for ele in elements:
+            ele_id = ele['id']
+            keep.append(ele)
             # make sure associated clusters are exported
             # keep track of the default collections (global) we are exporting so that schema can be exported as well
             # do not export schema for collections on non-default clusters.  Best to not mess with remote config
-            if e['searchClusterId'] == 'default':
-                collections.append(id)
+            if ele['searchClusterId'] == 'default':
+                collections.append(ele_id)
 
         collect_by_id(keep, obj_type)
 
@@ -589,7 +589,7 @@ try:
         target = args.app
         zipfile = None
         if args.zip is not None:
-            sprint("Getting export zip from file '" + args.zip + "'.")
+            sprint(f"Getting export zip from file '{args.zip}'")
             zipfile = ZipFile(args.zip, 'r')
             extract_app_from_zip(zipfile)
         else:
@@ -612,61 +612,72 @@ try:
         # parser.add_argument_group('bla bla bla instruction go here and they are really long \t and \n have tabs and\n newlines')
         parser.add_argument(
             "-a", "--app",
+            type=str,
             help="App to export"
             # ,default="lwes_"
         )
         parser.add_argument(
             "-d", "--dir",
+            type=str,
             help="Output directory, default: '${app}_ccyymmddhhmm'."
             # ,default="default"
         )
         parser.add_argument(
             "-s", "--server",
             metavar="SVR",
+            type=str,
             help="Server url e.g. http://localhost:80, \ndefault: ${lw_IN_SERVER} or 'localhost'."
             # default="localhost"
         )
         parser.add_argument(
             "-u", "--user",
+            type=str,
             help="Fusion user name, default: ${lw_USER} or 'admin'."
             # ,default="admin"
         )
         parser.add_argument(
             "--password",
+            type=str,
             help="Fusion Password,  default: ${lw_PASSWORD} or 'password123'."
             # ,default="password123"
         )
         parser.add_argument(
             "--jwt",
             help="JWT token for access to Fusion.  If set, --user and --password will be ignored",
+            type=str,
             default=None
         )
         parser.add_argument(
             "-v", "--verbose",
             help="Print details, default: False.",
+            type=bool,
             default=False,
             action="store_true"
         )
         parser.add_argument(
             "--debug",
             help="Print debug messages while running, default: False.",
+            type=bool,
             default=False,
             action="store_true"
         )
         parser.add_argument(
             "--noVerify",
             help="Do not verify SSL certificates if using https, default: False.",
+            type=bool,
             default=False,
             action="store_true"
         )
         parser.add_argument(
             "-z", "--zip",
             help="Path and name of the Zip file to read from rather than using an export from --server, \ndefault: None.",
+            type=str,
             default=None
         )
         parser.add_argument(
             "--noStageIdMunge",
             help="Experimental: may become default.  If True, do not munge pipeline stage ids. default: False.",
+            type=bool,
             default=False,
             action="store_true"
         )
@@ -687,4 +698,4 @@ except Exception as e:
         msg = e["text"]
     else:
         msg = str(e)
-    print("Exception: " + msg, file=sys.stderr)
+    print(f"Exception: {msg}", file=sys.stderr)
