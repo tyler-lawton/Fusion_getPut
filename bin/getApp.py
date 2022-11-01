@@ -35,18 +35,21 @@ Update or modify as needed
 # which start with the $PREFIX so that they can all be exported.
 
 #  Requires a python 3.x+ interpreter (tested on 3.8.9)
-from typing import Dict, Literal, Sequence, TypedDict
+import textwrap
+from typing import Literal, Sequence
+import json
+import sys
+import argparse
+import os
+import datetime
+import re
+import requests
+from requests import Response
+from io import BytesIO
+from zipfile import ZipFile
+from argparse import RawTextHelpFormatter
 
 try:
-    import json, sys, argparse, os, subprocess, sys, requests, datetime, re, shutil, types, base64
-    from io import BytesIO, StringIO
-    from requests import Response
-
-    # StringIO moved into io package for Python 3
-    # from StringIO import StringIO
-    from zipfile import ZipFile
-    from argparse import RawTextHelpFormatter
-
     # get current dir of this script
     cwd = os.path.dirname(os.path.realpath(sys.argv[0]))
 
@@ -65,10 +68,9 @@ try:
         "jobs": {"ext": "JOB"},
         "tasks": {"ext": "TSK"},
         "sparkJobs": {"ext": "SPRK", "filelist": []},
-        "blobs": {"ext": "BLOB", "urlType": "blob"}
-        # features can't be fetched by id in the export API but come along with the collections.
-        ,
+        "blobs": {"ext": "BLOB", "urlType": "blob"},
         "features": {"ext": "CF"},
+        # 👆 features can't be fetched by id in the export API but come along with the collections.
     }
 
     search_clusters = {}
@@ -130,7 +132,9 @@ try:
             def_dir = f"{str(args.zip)}_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}"
             args.dir = def_dir
 
-    def init_args_from_maps(key: str, default: str, penv: dict, env: dict) -> str:
+    def init_args_from_maps(
+        key: Literal["lw_USERNAME", "lw_PASSWORD", "lw_IN_URL"], default: str, penv: dict, env: dict
+    ) -> str:
         if key in penv:
             debug(f"penv has_key {key}:{penv[key]}")
             return penv[key]
@@ -179,7 +183,7 @@ try:
         :param j:
         :return　list of sized dictionaries of params such that none exceeds 6.5k:
         """
-        url = make_base_uri() + "/objects/export"
+        # url = make_base_uri() + "/objects/export"
         all_params = []
         params = {"filterPolicy": "system", "deep": "false"}
         # all_params.insert(0,params)
@@ -579,7 +583,7 @@ try:
         if not os.path.isdir(args.dir):
             os.makedirs(args.dir)
         # Fetch solr clusters map so we can export if needed
-        target = args.app
+        # target = args.app
         zipfile = None
         if args.zip is not None:
             sprint(f"Getting export zip from file '{args.zip}'")
@@ -590,107 +594,105 @@ try:
 
     if __name__ == "__main__":
         scriptName = os.path.basename(__file__)
-        # sample line: 'usage: getProject.py [-h] [-l] [--protocol PROTOCOL] [-s SERVER] [--port PORT]'
-        description = (
-            "______________________________________________________________________________\n"
-            "Get artifacts associated with a Fusion app and store them together in a folder \n"
-            "as subfolders, and flat files. These files can be stored, manipulate and uploaded, \n"
-            "to a Fusion instance as needed. NOTE: if launching from getApp.sh, \n"
-            "defaults will be pulled from the bash environment plus values from bin/lw.env.sh\n"
-            "______________________________________________________________________________"
+        parser = argparse.ArgumentParser(
+            description=textwrap.indent(
+                textwrap.dedent(
+                    """\
+           +-----------------------------------------------------------------------------------------+
+           | - Get artifacts associated with a Fusion app.                                           |
+           | - Store them together in a folder as sub-folders and flat files.                        |
+           | - These files can be stored, manipulate and uploaded to a Fusion instance as needed.    |
+           | - NOTE: if launching from getApp.sh, defaults will be pulled from the bash environment, | 
+           |   plus values from bin/lw.env.sh                                                        |
+           +-----------------------------------------------------------------------------------------+
+        """
+                ),
+                "\t",
+                lambda line: True,
+            ),
+            formatter_class=RawTextHelpFormatter,
         )
-        parser = argparse.ArgumentParser(description=description, formatter_class=RawTextHelpFormatter)
 
-        # parser.add_argument_group('bla bla bla instruction go here and they are really long \t and \n have tabs and\n newlines')
+        # parser.add_argument_group(
+        #   'bla bla bla instruction go here and they are really long \t and \n have tabs and\n newlines'
+        # )
         parser.add_argument(
             "-a",
             "--app",
             type=str,
-            help="App to export"
-            # ,default="lwes_"
+            help="App to export",
+            default="tf",
         )
-        parser.add_argument(
-            "-d",
-            "--dir",
-            type=str,
-            help="Output directory, default: '${app}_ccyymmddhhmm'."
-            # ,default="default"
-        )
+        parser.add_argument("--dir", type=str, help="Output directory, default: '${app}_ccyymmddhhmm'.")
         parser.add_argument(
             "-s",
             "--server",
             metavar="SVR",
             type=str,
-            help="Server url e.g. http://localhost:80, \ndefault: ${lw_IN_SERVER} or 'localhost'."
-            # default="localhost"
+            help=textwrap.dedent(
+                """\
+            Server url (see below).
+            Default: 
+            - ${lw_IN_SERVER} or 'https://fusion5.tfcom-cluster-na-srchdev.clouddev.thermofisher.net'.
+            Other Values: 
+            - 'https://fusion5.tfcom-cluster-na-srchqa1.clouddqa.thermofisher.net'
+            - 'https://fusion5.tfcom-cluster-na-srchprod.cloud.thermofisher.net'
+            """
+            ),
+            default="https://fusion5.tfcom-cluster-na-srchdev.clouddev.thermofisher.net",
         )
         parser.add_argument(
             "-u",
             "--user",
             type=str,
-            help="Fusion user name, default: ${lw_USER} or 'admin'."
-            # ,default="admin"
+            help="Fusion user name, default: ${lw_USER} or 'admin'.",
+            default="admin1",
         )
         parser.add_argument(
             "--password",
             type=str,
-            help="Fusion Password,  default: ${lw_PASSWORD} or 'password123'."
-            # ,default="password123"
+            help="Fusion Password,  default: ${lw_PASSWORD} or 'password123'.",
+            default="password123",
         )
         parser.add_argument(
             "--jwt",
-            help="JWT token for access to Fusion.  If set, --user and --password will be ignored",
-            type=str,
+            help="JWT token for access to Fusion.  If set, --user and --password will be ignored. Default: None",
+            # type=str,
             default=None,
         )
         parser.add_argument(
             "-v",
             "--verbose",
-            help="Print details, default: False.",
-            type=bool,
-            default=False,
+            help="Print details, default: False",
             action="store_true",
         )
         parser.add_argument(
+            "-d",
             "--debug",
-            help="Print debug messages while running, default: False.",
-            type=bool,
-            default=False,
+            help="Print debug messages while running, default: False",
             action="store_true",
         )
         parser.add_argument(
             "--noVerify",
-            help="Do not verify SSL certificates if using https, default: False.",
-            type=bool,
-            default=False,
+            help="Do not verify SSL certificates if using https, default: False",
             action="store_true",
         )
         parser.add_argument(
             "-z",
             "--zip",
-            help="Path and name of the Zip file to read from rather than using an export from --server, \ndefault: None.",
+            help="Path and name of the Zip file to read from rather than using an export from --server, default: None",
             type=str,
             default=None,
         )
         parser.add_argument(
             "--noStageIdMunge",
-            help="Experimental: may become default.  If True, do not munge pipeline stage ids. default: False.",
-            type=bool,
-            default=False,
+            help="Experimental: may become default.  If True, do not munge pipeline stage ids. default: False",
             action="store_true",
         )
 
         # print("args: " + str(sys.argv))
         args = parser.parse_args()
         main()
-except ImportError as ie:
-    print(
-        "Failed to Import from module: ",
-        ie.name,
-        "\ninstall the module via the pip installer\n\nExample:\npip3 install ",
-        ie.name,
-        file=sys.stderr,
-    )
 except Exception as e:
     msg = None
     if hasattr(e, "msg"):
