@@ -12,4 +12,3 @@ class TestGetFusionApp:
         for key in OBJ_TYPES:
             suf = OBJ_TYPES[key]["ext"]
             assert p.get_suffix(key) == f"_{suf}.json"
-
