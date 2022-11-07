@@ -7,4 +7,4 @@ if [ -f $CWD/lw.env.sh ]; then
 fi
 CSN=$(basename "$0")
 
-bash -c "$CWD/getApp.py ${*:1}"
+bash -c "$CWD/get_fusion_app.py ${*:1}"

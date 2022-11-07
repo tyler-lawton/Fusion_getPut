@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+# !/usr/bin/env python3
 
 """
 Use at your own risk.  No compatibility or maintenance or other assurance of suitability is expressed or implied.
@@ -36,7 +36,6 @@ Update or modify as needed
 
 #  Requires a python 3.x+ interpreter (tested on 3.8.9)
 import textwrap
-from typing import Literal, Sequence
 import json
 import sys
 import argparse
@@ -44,6 +43,7 @@ import os
 import datetime
 import re
 import requests
+from typing import Literal, Sequence
 from requests import Response
 from io import BytesIO
 from zipfile import ZipFile
@@ -602,8 +602,8 @@ try:
            | - Get artifacts associated with a Fusion app.                                           |
            | - Store them together in a folder as sub-folders and flat files.                        |
            | - These files can be stored, manipulate and uploaded to a Fusion instance as needed.    |
-           | - NOTE: if launching from getApp.sh, defaults will be pulled from the bash environment, | 
-           |   plus values from bin/lw.env.sh                                                        |
+           | - NOTE: if launching from get_fusion_app.sh, defaults will be pulled from the bash environment, | 
+           |   plus values from bin/lw_env.sh                                                        |
            +-----------------------------------------------------------------------------------------+
         """
                 ),
