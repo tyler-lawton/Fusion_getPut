@@ -51,9 +51,9 @@ from argparse import RawTextHelpFormatter
 
 try:
     # get current dir of this script
-    cwd = os.path.dirname(os.path.realpath(sys.argv[0]))
+    cwd: str = os.path.dirname(os.path.realpath(sys.argv[0]))
 
-    OBJ_TYPES = {
+    OBJ_TYPES: dict = {
         "fusionApps": {"ext": "APP"},
         "zones": {"ext": "ZN"},
         "templates": {"ext": "TPL"},
@@ -73,9 +73,9 @@ try:
         # 👆 features can't be fetched by id in the export API but come along with the collections.
     }
 
-    search_clusters = {}
-    collections = []
-    PARAM_SIZE_LIMIT = 6400
+    search_clusters: dict = {}
+    collections: list = []
+    PARAM_SIZE_LIMIT: int = 6400
     TAG_SUFFIX: str = "_mergeForm"
 
     def eprint(*args, **kwargs) -> None:
@@ -95,10 +95,19 @@ try:
         if args.verbose:
             sprint(msg)
 
-    def get_suffix(obj_type) -> str:
-        return f"_{OBJ_TYPES[obj_type]['ext']}.json"
+    def get_suffix(obj_type_key: str) -> str:
+        return f"_{OBJ_TYPES[obj_type_key]['ext']}.json"
 
-    def apply_suffix(f, suffix_type) -> str:
+    def apply_suffix(f: str, suffix_type: str) -> str:
+        """
+        Applies an appropriate suffix to a given filename.
+
+            input:
+                apply_suffix(f="some_file", suffix_type="fusionApps")
+            output:
+               "some_file_APP.json"
+
+        """
         suf = OBJ_TYPES[suffix_type]["ext"]
         if not f.endswith(suf):
             return f"{f}{get_suffix(suffix_type)}"
@@ -106,7 +115,7 @@ try:
 
     def init_args() -> None:
         env = {}  # some day we may get better environment passing
-        debug("initArgs start")
+        debug("init_args start")
 
         # setting come from command line but if not set then pull from environment
         if args.server is None:
@@ -133,7 +142,10 @@ try:
             args.dir = def_dir
 
     def init_args_from_maps(
-        key: Literal["lw_USERNAME", "lw_PASSWORD", "lw_IN_URL"], default: str, penv: dict, env: dict
+        key: Literal["lw_USERNAME", "lw_PASSWORD", "lw_IN_URL"],
+        default: str,
+        penv: dict,
+        env: dict,
     ) -> str:
         if key in penv:
             debug(f"penv has_key {key}:{penv[key]}")
@@ -602,8 +614,9 @@ try:
            | - Get artifacts associated with a Fusion app.                                           |
            | - Store them together in a folder as sub-folders and flat files.                        |
            | - These files can be stored, manipulate and uploaded to a Fusion instance as needed.    |
-           | - NOTE: if launching from get_fusion_app.sh, defaults will be pulled from the bash environment, | 
-           |   plus values from bin/lw_env.sh                                                        |
+           | - NOTE: If launching from get_fusion_app.sh,                                            | 
+           |         defaults will be pulled from the bash environment,                              | 
+           |         plus values from bin/lw_env.sh                                                  |
            +-----------------------------------------------------------------------------------------+
         """
                 ),
